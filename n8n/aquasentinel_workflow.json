@@ -1,0 +1,87 @@
+{
+  "name": "AquaSentinel - Anomaly Investigation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "aquasentinel-anomaly",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Anomaly Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AGENT_URL }}/investigate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"event_id\": $json.body.event_id } }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "call-agent",
+      "name": "Call Investigation Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.BACKEND_URL }}/api/events/{{ $json.event_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-API-Key", "value": "={{ $env.AQUASENTINEL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"investigation_status\": \"DONE\", \"status\": \"ACTION_REQUIRED\", \"investigation_result\": $json.investigation_result, \"recommendation\": $json.recommendation, \"confidence\": $json.confidence } }}",
+        "options": {}
+      },
+      "id": "write-back-backend",
+      "name": "Write Result Back to Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"investigated\", \"event_id\": $json.event_id } }}"
+      },
+      "id": "respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Anomaly Webhook": {
+      "main": [[{ "node": "Call Investigation Agent", "type": "main", "index": 0 }]]
+    },
+    "Call Investigation Agent": {
+      "main": [[{ "node": "Write Result Back to Backend", "type": "main", "index": 0 }]]
+    },
+    "Write Result Back to Backend": {
+      "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "_notes": [
+    "Import this into n8n via Workflows > Import from File.",
+    "Set n8n environment variables before activating: AGENT_URL (e.g. http://localhost:8001), BACKEND_URL (e.g. http://localhost:8000), AQUASENTINEL_API_KEY (must match backend/.env).",
+    "The backend POSTs {\"event_id\": \"...\"} to this webhook's URL (set as N8N_WEBHOOK_URL in backend/.env) whenever a new anomaly event is created.",
+    "This workflow matches SRS Section 13: Sensor Reading -> Backend -> Anomaly Detector -> Anomaly Event -> n8n Trigger -> Agent Investigation -> Store Investigation Result."
+  ]
+}

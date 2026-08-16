@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>AquaSentinel</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { --ok:#1a7f37; --bad:#b42318; --bg:#0b1220; --card:#121b2e; --text:#e8edf5; --muted:#8b96a8; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:24px 32px; border-bottom:1px solid #1f2b40; }
+  h1 { margin:0; font-size:22px; letter-spacing:.5px; }
+  main { max-width:900px; margin:0 auto; padding:24px 32px; }
+  .status-banner { padding:16px 20px; border-radius:10px; font-weight:600; margin-bottom:20px; }
+  .status-normal { background:rgba(26,127,55,.15); color:var(--ok); border:1px solid var(--ok); }
+  .status-anomaly { background:rgba(180,35,24,.15); color:var(--bad); border:1px solid var(--bad); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px; margin-bottom:24px; }
+  .card { background:var(--card); border:1px solid #1f2b40; border-radius:10px; padding:16px; }
+  .card .label { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.5px; }
+  .card .value { font-size:28px; font-weight:700; margin-top:6px; }
+  .panel { background:var(--card); border:1px solid #1f2b40; border-radius:10px; padding:20px; margin-bottom:16px; }
+  .panel h2 { margin:0 0 8px; font-size:14px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+  .panel p { margin:0; line-height:1.5; }
+  .muted { color:var(--muted); font-size:13px; }
+  .config { color:var(--muted); font-size:13px; margin-top:24px; }
+  input { background:#0b1220; border:1px solid #1f2b40; color:var(--text); padding:6px 8px; border-radius:6px; }
+</style>
+</head>
+<body>
+<header><h1>AquaSentinel</h1></header>
+<main>
+  <div id="status" class="status-banner status-normal">Loading...</div>
+
+  <div class="grid" id="readings-grid">
+    <div class="card"><div class="label">pH</div><div class="value" id="v-ph">--</div></div>
+    <div class="card"><div class="label">TDS (ppm)</div><div class="value" id="v-tds">--</div></div>
+    <div class="card"><div class="label">Turbidity (NTU)</div><div class="value" id="v-turbidity">--</div></div>
+    <div class="card"><div class="label">Temperature (°C)</div><div class="value" id="v-temperature">--</div></div>
+  </div>
+
+  <div class="panel" id="anomaly-panel" style="display:none">
+    <h2>AI Investigation</h2>
+    <p id="v-explanation">--</p>
+    <p class="muted" style="margin-top:10px" id="v-confidence"></p>
+    <h2 style="margin-top:16px">Recommendation</h2>
+    <p id="v-recommendation">--</p>
+  </div>
+
+  <p class="muted" id="last-updated"></p>
+
+  <div class="config">
+    Backend: <input id="backend-url" value="http://localhost:8000" size="30" />
+    Node: <input id="node-id" value="node-01" size="10" />
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const POLL_MS = 5000;
+
+async function poll() {
+  const base = $('backend-url').value.replace(/\/$/, '');
+  const nodeId = $('node-id').value;
+  try {
+    const readingRes = await fetch(`${base}/api/readings/current?node_id=${nodeId}`);
+    if (readingRes.ok) {
+      const r = await readingRes.json();
+      $('v-ph').textContent = r.ph.toFixed(2);
+      $('v-tds').textContent = r.tds.toFixed(0);
+      $('v-turbidity').textContent = r.turbidity.toFixed(2);
+      $('v-temperature').textContent = r.temperature.toFixed(1);
+      $('last-updated').textContent = `Last reading: ${new Date(r.timestamp).toLocaleString()}`;
+    }
+
+    const eventsRes = await fetch(`${base}/api/events?node_id=${nodeId}&limit=1`);
+    const events = eventsRes.ok ? await eventsRes.json() : [];
+    const latest = events[0];
+    const statusEl = $('status');
+    const panel = $('anomaly-panel');
+
+    if (latest && latest.status !== 'RESOLVED') {
+      statusEl.textContent = `STATUS: ANOMALY DETECTED (severity: ${latest.severity || 'unknown'})`;
+      statusEl.className = 'status-banner status-anomaly';
+      panel.style.display = 'block';
+      $('v-explanation').textContent = latest.investigation_result || 'Investigation in progress...';
+      $('v-recommendation').textContent = latest.recommendation || 'Awaiting agent recommendation.';
+      $('v-confidence').textContent = latest.confidence != null ? `Confidence: ${Math.round(latest.confidence * 100)}%` : '';
+    } else {
+      statusEl.textContent = 'STATUS: NORMAL';
+      statusEl.className = 'status-banner status-normal';
+      panel.style.display = 'none';
+    }
+  } catch (err) {
+    $('status').textContent = 'STATUS: BACKEND UNREACHABLE';
+    $('status').className = 'status-banner status-anomaly';
+    console.error(err);
+  }
+}
+
+poll();
+setInterval(poll, POLL_MS);
+</script>
+</body>
+</html>

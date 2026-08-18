@@ -1,0 +1,28 @@
+services:
+  # =========================================================================
+  # AquaSentinel Backend API & Dashboard Web Service on Render
+  # =========================================================================
+  - type: web
+    name: aquasentinel-backend
+    runtime: python
+    plan: free
+    region: oregon # or frankfurt, singapore, ohio
+    buildCommand: "pip install --upgrade pip && pip install -r backend/requirements.txt"
+    startCommand: "python scripts/seed_data.py && uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.2
+      - key: LLM_PROVIDER
+        value: fallback
+      - key: SARVAM_API_KEY
+        sync: false
+      - key: SARVAM_MODEL_NAME
+        value: sarvam-2b
+      - key: DEFAULT_DEVICE_ID
+        value: AQUA-01
+      - key: WATER_BODY_NAME
+        value: Simulated Reservoir 01
+      - key: DATABASE_URL
+        value: sqlite:///./aquasentinel.db

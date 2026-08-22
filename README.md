@@ -143,10 +143,26 @@ WhatsApp and voice are thin front-ends over the same agent.
 
 ### 7. Firmware
 
-`firmware/esp32_node/esp32_node.ino` is a skeleton: Wi-Fi + HTTP POST with
-the exact JSON payload the backend expects are wired up; the actual sensor
-calibration math (pH/TDS/turbidity/temperature) is left as `TODO` for
-Workstream A to fill in with real probe calibration.
+`firmware/esp32_node/esp32_node.ino` is configured for physical hardware sensors with 30-sample median filtering, ADC1-safe pins, temperature compensation, and configurable calibration constants:
+
+- **Sensors & Wiring (ESP32 DevKit V1)**:
+  - **DS18B20 Temp (Digital 1-Wire)**: GPIO 4 (with 4.7kΩ pull-up resistor to 3.3V)
+  - **pH Sensor (Analog)**: GPIO 34 (ADC1_CH6)
+  - **TDS Sensor (Analog)**: GPIO 35 (ADC1_CH7)
+  - **Turbidity Sensor (Analog)**: GPIO 32 (ADC1_CH4)
+  - *All analog sensors use ADC1 to prevent conflict with active Wi-Fi.*
+
+- **Required Arduino Libraries**:
+  1. `ArduinoJson` (v6 or v7)
+  2. `OneWire`
+  3. `DallasTemperature`
+
+- **Sensor Pipeline & Calibration**:
+  - **Temperature**: Digital OneWire reading with 25.0°C fallback if disconnected.
+  - **TDS (ppm)**: $V_{comp} = \frac{V}{1.0 + 0.02 \times (T - 25.0)}$, followed by polynomial conversion and `TDS_K_VALUE` scaling.
+  - **pH**: $pH = 7.0 + \frac{V_{neutral} - V}{pH_{slope}}$ (configurable `PH_NEUTRAL_VOLTAGE` and `PH_SLOPE_VOLTAGE_PER_PH`).
+  - **Turbidity (NTU)**: Configurable polynomial coefficients `TURBIDITY_A`, `TURBIDITY_B`, `TURBIDITY_C` with clean-water thresholding.
+
 
 ## Design notes
 
